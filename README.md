@@ -1,6 +1,6 @@
 # hermes-skill-outlook
 
-A Microsoft 365 **Calendar + To Do** skill that talks directly to Microsoft Graph from a single self-contained Python script. Built as an agent skill (the Microsoft counterpart to a `google-workspace` skill) but usable as a plain CLI on its own.
+A Microsoft 365 **Calendar + To Do** skill that talks directly to Microsoft Graph from a single self-contained Python script (plus a one-time auth-bootstrap helper). Built as an agent skill (the Microsoft counterpart to a `google-workspace` skill) but usable as a plain CLI on its own.
 
 Originally proposed upstream as [NousResearch/hermes-agent#25979](https://github.com/NousResearch/hermes-agent/issues/25979).
 
@@ -51,7 +51,7 @@ cp .credentials/config.example.json .credentials/config.json
 ### 3. Authenticate (once)
 
 ```bash
-python scripts/setup_auth.py
+python3 scripts/setup_auth.py
 ```
 
 Follow the printed device-code prompt (open the URL, enter the code, sign in). On success it writes `.credentials/credentials.json`. From then on the token refreshes itself.
@@ -59,8 +59,8 @@ Follow the printed device-code prompt (open the URL, enter the code, sign in). O
 ### 4. Verify
 
 ```bash
-python scripts/outlook.py status
-python scripts/outlook.py calendars
+python3 scripts/outlook.py status
+python3 scripts/outlook.py calendars
 ```
 
 Optionally set `default_calendar` (the ID from `calendars`) and `default_calendar_name` in `config.json` so bare `events`/`create-event` calls target your preferred calendar.
@@ -70,11 +70,11 @@ Optionally set `default_calendar` (the ID from `calendars`) and `default_calenda
 See [`SKILL.md`](SKILL.md) for the full subcommand reference and agent-facing usage notes. Quick taste:
 
 ```bash
-python scripts/outlook.py events --all-calendars --days 7
-python scripts/outlook.py create-event --subject "Dentist" \
+python3 scripts/outlook.py events --all-calendars --days 7
+python3 scripts/outlook.py create-event --subject "Dentist" \
   --start "2026-05-20T10:00:00" --end "2026-05-20T11:00:00" --dry-run
-python scripts/outlook.py tasks
-python scripts/outlook.py create-task --title "Bananas" --list "Shopping"
+python3 scripts/outlook.py tasks
+python3 scripts/outlook.py create-task --title "Bananas" --list "Shopping"
 ```
 
 ## Notes

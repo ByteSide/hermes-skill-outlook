@@ -10,7 +10,7 @@ metadata:
 
 # Outlook / Microsoft 365
 
-Talks directly to Microsoft Graph against a personal Microsoft 365 account. Auth runs over a refresh token (in `.credentials/credentials.json`), refreshed autonomously on the first call once the access token has expired.
+Talks directly to Microsoft Graph against a Microsoft 365 account (personal or work/school). Auth runs over a refresh token (in `.credentials/credentials.json`), refreshed autonomously on the first call once the access token has expired.
 
 **What it does:**
 - Read calendars — the default calendar is configurable in `config.json`
@@ -21,7 +21,7 @@ Talks directly to Microsoft Graph against a personal Microsoft 365 account. Auth
 
 1. Register an app in [Azure Portal → App registrations](https://portal.azure.com) (personal Microsoft accounts supported). Add the delegated Graph scopes `User.Read`, `Calendars.ReadWrite`, `Calendars.ReadWrite.Shared`, `Tasks.ReadWrite`, `Tasks.ReadWrite.Shared`, plus `offline_access`. Enable the "Allow public client flows" toggle (device-code flow).
 2. Copy `.credentials/config.example.json` to `.credentials/config.json` and fill in your `client_id`.
-3. Run `python scripts/setup_auth.py` and follow the device-code prompt. This writes `.credentials/credentials.json`.
+3. Run `python3 scripts/setup_auth.py` and follow the device-code prompt. This writes `.credentials/credentials.json`.
 4. Optionally set `default_calendar` / `default_calendar_name` in `config.json` once you know your calendar IDs (run `outlook.py calendars`).
 
 See `README.md` for the full walkthrough.
@@ -31,7 +31,7 @@ See `README.md` for the full walkthrough.
 Single executable: `scripts/outlook.py`
 
 ```bash
-python scripts/outlook.py <subcommand> [args]
+python3 scripts/outlook.py <subcommand> [args]
 ```
 
 Output is always JSON; errors go to stderr + exit 1.
@@ -366,12 +366,14 @@ Useful when an Outlook call fails and it's unclear whether it's auth or another 
 {
   "client_id": "your-azure-app-client-id",
   "tenant": "common",
-  "default_calendar": "AAMk... (calendar ID, optional)",
+  "default_calendar": "",
   "default_calendar_name": "Calendar"
 }
 ```
 
 `tenant` defaults to `common` (org + personal accounts). Use `consumers` for a personal-accounts-only app, or your tenant ID for a single work/school tenant — it must match the app's sign-in audience.
+
+`default_calendar` is optional: a calendar ID (from `outlook.py calendars`) that bare `events`/`create-event` calls target. Left empty, they fall back to the account's primary calendar. `default_calendar_name` is only a display label in output.
 
 `.credentials/credentials.json` (auto-managed by `setup_auth.py` + refresh):
 - `access_token`, `expires_in`, `expires_at` — reset on every refresh
