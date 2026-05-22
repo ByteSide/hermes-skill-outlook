@@ -298,23 +298,23 @@ def _resolve_list(arg: str | None, token: str) -> tuple[str, str]:
     if not lists:
         raise SystemExit("no To Do lists found on this account")
     if not arg:
-        for l in lists:
-            if l.get("wellknownListName") == "defaultList":
-                return l["id"], l["displayName"]
+        for lst in lists:
+            if lst.get("wellknownListName") == "defaultList":
+                return lst["id"], lst["displayName"]
         return lists[0]["id"], lists[0]["displayName"]
     if _looks_like_id(arg):
         # Look up the real display name so audit-log + output are readable.
-        for l in lists:
-            if l["id"] == arg:
-                return arg, l["displayName"]
+        for lst in lists:
+            if lst["id"] == arg:
+                return arg, lst["displayName"]
         # ID points to a list we don't see (e.g. recently deleted) — let
         # the caller hit Graph and get a clear 404 with the ID echoed.
         return arg, "(unresolved)"
-    for l in lists:
-        if l["displayName"].lower() == arg.lower():
-            return l["id"], l["displayName"]
+    for lst in lists:
+        if lst["displayName"].lower() == arg.lower():
+            return lst["id"], lst["displayName"]
     raise SystemExit(
-        f"list {arg!r} not found.  Known: {[l['displayName'] for l in lists]}"
+        f"list {arg!r} not found.  Known: {[lst['displayName'] for lst in lists]}"
     )
 
 
@@ -738,9 +738,9 @@ def cmd_lists(args):
     print(
         json.dumps(
             [
-                {"id": l["id"], "name": l["displayName"],
-                 "wellknown": l.get("wellknownListName")}
-                for l in lists
+                {"id": lst["id"], "name": lst["displayName"],
+                 "wellknown": lst.get("wellknownListName")}
+                for lst in lists
             ],
             indent=2,
             ensure_ascii=False,
