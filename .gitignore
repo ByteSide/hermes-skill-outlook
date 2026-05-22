@@ -1,0 +1,6 @@
+.credentials/*
+!.credentials/config.example.json
+audit.log
+__pycache__/
+*.pyc
+*.tmp
