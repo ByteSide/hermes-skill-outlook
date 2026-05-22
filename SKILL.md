@@ -36,7 +36,7 @@ python scripts/outlook.py <subcommand> [args]
 
 Output is always JSON; errors go to stderr + exit 1.
 
-Optional env var `OUTLOOK_TZ` overrides the timezone (default `Europe/Berlin`).
+Optional env var `OUTLOOK_TZ` overrides the timezone (default `UTC`), e.g. `OUTLOOK_TZ="Europe/Berlin"`.
 
 ## When to use which subcommand
 
@@ -103,7 +103,7 @@ outlook.py events --calendar all        # synonym for --all-calendars
 
 **Note:** an early bug made `--all-calendars` user-default-only (it ignored shared calendars). It now iterates `/me/calendars` and calls `/me/calendars/{id}/calendarView` per calendar — same pattern as `search-events`. Output carries a `calendar` field per event for provenance.
 
-**Important:** the default is ONLY the `default_calendar` from `config.json`. An event sitting in another calendar would NOT show up with a bare `events` call. For day/week overviews, **always pass `--all-calendars`**.
+**Important:** without a flag, only the `default_calendar` from `config.json` is read (or the account's primary calendar if no default is configured). An event sitting in another calendar would NOT show up with a bare `events` call. For day/week overviews, **always pass `--all-calendars`**.
 
 Output: `{ "calendar": "...", "past_days": N, "future_days": N, "count": M, "events": [...] }` — each event has `id, subject, start, end, all_day, location, organizer, body_preview, web_link, type, series_master_id`.
 
@@ -125,7 +125,7 @@ outlook.py create-event --subject "Dentist" \
   --location "Main St 12"
 ```
 
-Default calendar = `default_calendar` from `config.json`. Target another via `--calendar "Name"`.
+Default calendar = `default_calendar` from `config.json` (or the account's primary calendar if unset). Target another via `--calendar "Name"`.
 
 **Idempotency:** `create-event` automatically sets a content-based `transactionId` (SHA-256 of subject + start + end + calendar id, truncated to 40 chars). Microsoft Graph dedupes POSTs with the same transactionId within **6 hours** onto the same event ID. Effect: if the agent retries the call after a network timeout, there's NO duplicate. To intentionally create the same event twice, vary at least one field.
 
@@ -365,10 +365,13 @@ Useful when an Outlook call fails and it's unclear whether it's auth or another 
 ```json
 {
   "client_id": "your-azure-app-client-id",
+  "tenant": "common",
   "default_calendar": "AAMk... (calendar ID, optional)",
   "default_calendar_name": "Calendar"
 }
 ```
+
+`tenant` defaults to `common` (org + personal accounts). Use `consumers` for a personal-accounts-only app, or your tenant ID for a single work/school tenant — it must match the app's sign-in audience.
 
 `.credentials/credentials.json` (auto-managed by `setup_auth.py` + refresh):
 - `access_token`, `expires_in`, `expires_at` — reset on every refresh

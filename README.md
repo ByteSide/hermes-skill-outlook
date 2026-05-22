@@ -16,6 +16,8 @@ Output is always JSON; errors go to stderr with exit 1. No framework, no build s
 
 ## Install
 
+Requires Python 3.8+.
+
 ```bash
 git clone https://github.com/ByteSide/hermes-skill-outlook.git
 cd hermes-skill-outlook
@@ -28,7 +30,7 @@ pip install -r requirements.txt
 
 In the [Azure Portal → App registrations](https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade):
 
-1. **New registration.** Supported account types: *"Personal Microsoft accounts only"* (or include work/school if you need it).
+1. **New registration.** For supported account types, pick **"Accounts in any organizational directory and personal Microsoft accounts"** — this matches the default `"tenant": "common"`. (If you instead pick *"Personal Microsoft accounts only"*, set `"tenant": "consumers"` in `config.json`; for a single work/school tenant, set your tenant ID.)
 2. Under **Authentication → Advanced settings**, set **"Allow public client flows"** to **Yes** (required for the device-code flow).
 3. Under **API permissions → Add a permission → Microsoft Graph → Delegated permissions**, add:
    - `User.Read`
@@ -77,7 +79,7 @@ python scripts/outlook.py create-task --title "Bananas" --list "Shopping"
 
 ## Notes
 
-- **Timezone:** defaults to `Europe/Berlin`. Override with the `OUTLOOK_TZ` env var. `--start`/`--end` must be timezone-*naive* ISO (no `Z`, no offset) — the TZ is applied via a Graph `Prefer` header.
+- **Timezone:** defaults to `UTC`. Override with the `OUTLOOK_TZ` env var (e.g. `OUTLOOK_TZ="Europe/Berlin"`). `--start`/`--end` must be timezone-*naive* ISO (no `Z`, no offset) — the TZ is applied via a Graph `Prefer` header.
 - **Credentials never leave your machine.** `.credentials/` is gitignored; only `config.example.json` is tracked.
 - **Writes are confirm-first by design.** Every mutating subcommand supports `--dry-run`, which returns the request body without side effects — wire your agent to show the dry run and get a yes before the real call.
 

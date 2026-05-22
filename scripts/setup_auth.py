@@ -28,9 +28,10 @@ CRED_DIR = SKILL_DIR / ".credentials"
 CRED_FILE = CRED_DIR / "credentials.json"
 CONF_FILE = CRED_DIR / "config.json"
 
-AUTHORITY = "https://login.microsoftonline.com/common/oauth2/v2.0"
-DEVICECODE_URL = f"{AUTHORITY}/devicecode"
-TOKEN_URL = f"{AUTHORITY}/token"
+# {tenant} = common | consumers | organizations | <tenant-id>, from
+# config.json "tenant" (default "common").  Must match the app's
+# signInAudience — see README.
+AUTHORITY_TMPL = "https://login.microsoftonline.com/{tenant}/oauth2/v2.0"
 
 SCOPE = (
     "offline_access User.Read "
@@ -39,7 +40,7 @@ SCOPE = (
 )
 
 
-def _load_client_id() -> str:
+def _load_conf() -> dict:
     if not CONF_FILE.exists():
         sys.exit(
             f"missing {CONF_FILE}\n"
@@ -50,12 +51,12 @@ def _load_client_id() -> str:
     client_id = conf.get("client_id")
     if not client_id or client_id.startswith("your-"):
         sys.exit(f"set a real client_id in {CONF_FILE}")
-    return client_id
+    return conf
 
 
-def _request_device_code(client_id: str) -> dict:
+def _request_device_code(client_id: str, authority: str) -> dict:
     r = requests.post(
-        DEVICECODE_URL,
+        f"{authority}/devicecode",
         data={"client_id": client_id, "scope": SCOPE},
         timeout=20,
     )
@@ -64,13 +65,13 @@ def _request_device_code(client_id: str) -> dict:
     return r.json()
 
 
-def _poll_for_token(client_id: str, device_code: str, interval: int,
-                    expires_in: int) -> dict:
+def _poll_for_token(client_id: str, authority: str, device_code: str,
+                    interval: int, expires_in: int) -> dict:
     deadline = time.time() + expires_in
     while time.time() < deadline:
         time.sleep(interval)
         r = requests.post(
-            TOKEN_URL,
+            f"{authority}/token",
             data={
                 "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
                 "client_id": client_id,
@@ -80,14 +81,18 @@ def _poll_for_token(client_id: str, device_code: str, interval: int,
         )
         if r.status_code == 200:
             return r.json()
-        err = r.json().get("error", "")
+        try:
+            body = r.json()
+        except ValueError:
+            sys.exit(f"token endpoint returned {r.status_code}: {r.text[:300]}")
+        err = body.get("error", "")
         if err == "authorization_pending":
             continue
         if err == "slow_down":
             interval += 5
             continue
         # authorization_declined, expired_token, bad_verification_code, ...
-        sys.exit(f"auth failed: {err} — {r.json().get('error_description', '')[:300]}")
+        sys.exit(f"auth failed: {err} — {body.get('error_description', '')[:300]}")
     sys.exit("device code expired before authorization completed")
 
 
@@ -107,11 +112,13 @@ def _save_creds(tok: dict) -> None:
 
 
 def main() -> None:
-    client_id = _load_client_id()
-    dc = _request_device_code(client_id)
+    conf = _load_conf()
+    client_id = conf["client_id"]
+    authority = AUTHORITY_TMPL.format(tenant=conf.get("tenant", "common"))
+    dc = _request_device_code(client_id, authority)
     print(dc["message"], flush=True)  # human-readable: go to URL, enter code
     tok = _poll_for_token(
-        client_id, dc["device_code"], int(dc.get("interval", 5)),
+        client_id, authority, dc["device_code"], int(dc.get("interval", 5)),
         int(dc.get("expires_in", 900)),
     )
     if "refresh_token" not in tok:

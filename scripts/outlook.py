@@ -42,8 +42,12 @@ CONF_FILE = SKILL_DIR / ".credentials" / "config.json"
 AUDIT_LOG = SKILL_DIR / "audit.log"
 
 GRAPH = "https://graph.microsoft.com/v1.0"
-TOKEN_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
-TZ = os.environ.get("OUTLOOK_TZ", "Europe/Berlin")
+# {tenant} = common | consumers | organizations | <tenant-id>, set via
+# config.json "tenant" (default "common").  Must match the app's
+# signInAudience: "common" needs an app that allows org + personal accounts;
+# a personal-accounts-only app needs "consumers".
+TOKEN_URL_TMPL = "https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token"
+TZ = os.environ.get("OUTLOOK_TZ", "UTC")
 
 # Graph IDs for calendar items vs. todo items both look like long
 # base64-ish blobs.  We treat any string ≥ 60 chars OR starting with the
@@ -59,7 +63,7 @@ def _looks_like_id(s: str) -> bool:
 # TZ-aware suffixes: 'Z', '+02:00', '-0500'.  Must NOT be present in
 # --start/--end because Graph wants a naive dateTime plus a separate
 # timeZone field; mixing both makes the result ambiguous (off-by-one
-# in winter when caller assumed CEST).
+# when the caller hardcodes a summer offset).
 _TZ_SUFFIX_RE = re.compile(r"(Z|[+-]\d{2}:?\d{2})$")
 
 
@@ -68,7 +72,7 @@ def _validate_naive_iso(iso: str, field: str) -> None:
         raise SystemExit(
             f"--{field}={iso!r} carries a timezone suffix (Z or +HH:MM). "
             f"Pass a naive ISO 8601 string like '2026-05-20T18:00:00' — "
-            f"the timezone is set separately (Europe/Berlin by default)."
+            f"the timezone is set separately (UTC by default, override via OUTLOOK_TZ)."
         )
 
 
@@ -129,7 +133,7 @@ def _save_creds(creds: dict) -> None:
 
 def _refresh(creds: dict, conf: dict) -> dict:
     r = requests.post(
-        TOKEN_URL,
+        TOKEN_URL_TMPL.format(tenant=conf.get("tenant", "common")),
         data={
             "grant_type": "refresh_token",
             "refresh_token": creds["refresh_token"],
@@ -158,6 +162,16 @@ def _refresh(creds: dict, conf: dict) -> dict:
 
 
 def get_token() -> tuple[str, dict]:
+    if not CONF_FILE.exists():
+        raise SystemExit(
+            f"missing {CONF_FILE} — copy .credentials/config.example.json to "
+            f"config.json and set your client_id (see README)."
+        )
+    if not CRED_FILE.exists():
+        raise SystemExit(
+            f"missing {CRED_FILE} — run `python scripts/setup_auth.py` first "
+            f"to authenticate (see README)."
+        )
     creds = _load_json(CRED_FILE)
     conf = _load_json(CONF_FILE)
     if int(time.time()) >= int(creds.get("expires_at", 0)):
@@ -263,9 +277,11 @@ def _build_recurrence(spec: str | None, start_iso: str, *,
 def _resolve_calendar(arg: str | None, token: str, conf: dict) -> str:
     if not arg:
         cal = conf.get("default_calendar")
-        if not cal:
-            raise SystemExit("no --calendar and no default_calendar in config.json")
-        return cal
+        if cal:
+            return cal
+        # No default configured — fall back to the account's primary calendar
+        # so a bare `events`/`create-event` works out of the box.
+        return gapi("GET", "/me/calendar?$select=id", token)["id"]
     if _looks_like_id(arg):
         return arg
     cals = gapi("GET", "/me/calendars?$top=100", token).get("value", [])
@@ -986,9 +1002,9 @@ def main():
                    ).set_defaults(func=cmd_calendars)
 
     se = sub.add_parser("search-events",
-                        help='subject/body keyword search across all calendars')
+                        help='subject keyword search across all calendars')
     se.add_argument("--query", required=True,
-                    help='free-text term, matches subject + body + attendees')
+                    help='case-insensitive substring matched against event subject')
     se.add_argument("--limit", type=int, default=25)
     se.set_defaults(func=cmd_search_events)
 
@@ -999,7 +1015,7 @@ def main():
     ed.set_defaults(func=cmd_event_detail)
 
     al = sub.add_parser("audit-log",
-                        help='read recent writes from outlook/audit.log')
+                        help='read recent write-ops from audit.log')
     al.add_argument("--tail", type=int, default=20,
                     help='show last N entries (default 20, 0 = all)')
     al.add_argument("--op",
@@ -1115,7 +1131,7 @@ def main():
     dl.set_defaults(func=cmd_delete_list)
 
     # ---- subtasks / "Schritte" / checklistItems ----
-    st = sub.add_parser("steps", help="list checklist items / Schritte for a task")
+    st = sub.add_parser("steps", help="list checklist items (steps) for a task")
     st.add_argument("task_id")
     st.add_argument("--list")
     st.set_defaults(func=cmd_steps)

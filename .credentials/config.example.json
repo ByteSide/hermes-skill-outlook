@@ -1,5 +1,6 @@
 {
   "client_id": "your-azure-app-client-id",
+  "tenant": "common",
   "default_calendar": "",
   "default_calendar_name": "Calendar"
 }
