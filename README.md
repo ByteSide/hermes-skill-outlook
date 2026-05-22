@@ -83,6 +83,15 @@ python scripts/outlook.py create-task --title "Bananas" --list "Shopping"
 - **Credentials never leave your machine.** `.credentials/` is gitignored; only `config.example.json` is tracked.
 - **Writes are confirm-first by design.** Every mutating subcommand supports `--dry-run`, which returns the request body without side effects — wire your agent to show the dry run and get a yes before the real call.
 
+## Tests
+
+Offline behavior tests (no network, no credentials) for the recurrence,
+idempotency, and validation logic:
+
+```bash
+python3 tests/test_offline.py
+```
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
