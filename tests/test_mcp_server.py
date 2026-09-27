@@ -214,6 +214,45 @@ def test_unexpected_failure_is_named_not_a_crash(graph, monkeypatch):
     assert res.is_error and "unexpected: KeyError" in _text(res)
 
 
+# ------------------------------------------- IDs from a model are untrusted
+
+@pytest.mark.parametrize("bad", ["../../me/messages", "AAMk?$select=x", "abc#frag", "a%2Fb", "x/y", "a b"])
+def test_malformed_ids_are_refused_before_graph(graph, bad):
+    res = run(_call(srv.create_server(), "get_event", {"event_id": bad}))
+    assert res.is_error and "Graph ID" in _text(res)
+    assert graph.calls == []
+
+
+def test_write_and_delete_tools_check_ids_too(graph):
+    server = srv.create_server(allow_write=True, allow_delete=True)
+    for tool, args in (("update_event", {"event_id": "a/../b", "subject": "x"}),
+                       ("complete_task", {"task_id": "t?x"}),
+                       ("complete_step", {"task_id": "T1", "step_id": "s/../x"}),
+                       ("delete_event", {"event_id": "e#x"}),
+                       ("delete_task", {"task_id": "t%2F"})):
+        res = run(_call(server, tool, args))
+        assert res.is_error and "Graph ID" in _text(res), tool
+    assert graph.calls == []
+
+
+def test_real_graph_ids_pass():
+    srv.check_id("event_id", "AAMkAGI2TG93AAA=")
+    srv.check_id("task_id", "AQMkADAwATM0MDAAMS1hZjc2LTc3Y2UtMDACLTAwCgBGAAAD-_x+y")
+
+
+def test_calendar_that_looks_like_an_id_must_be_clean_but_names_stay_free(graph):
+    fake_id = "AAMk" + "A" * 60 + "/../../me"
+    res = run(_call(srv.create_server(), "list_events", {"calendar": fake_id}))
+    assert res.is_error and "Graph ID" in _text(res) and graph.calls == []
+    res = run(_call(srv.create_server(), "list_events", {"calendar": "Arbeit/Privat"}))
+    assert res.is_error and "not found" in _text(res)   # a plain name: looked up by name, never put into a URL
+
+
+def test_instructions_name_the_time_zone_and_untrusted_text():
+    text = srv.create_server().instructions
+    assert "OUTLOOK_TZ" in text and srv.outlook.TZ in text and "data, not instructions" in text
+
+
 # ----------------------------------------------------------- real transport
 
 def test_starts_over_stdio_as_a_subprocess():

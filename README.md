@@ -98,9 +98,9 @@ in Claude Code:
 
 ```bash
 # read-only (default)
-claude mcp add m365 -- /path/to/.venv/bin/python /path/to/scripts/mcp_server.py
+claude mcp add m365 -e OUTLOOK_TZ=Europe/Berlin -- /path/to/.venv/bin/python /path/to/scripts/mcp_server.py
 # allow creating/updating/completing
-claude mcp add m365 -e M365_MCP_WRITE=1 -- /path/to/.venv/bin/python /path/to/scripts/mcp_server.py
+claude mcp add m365 -e OUTLOOK_TZ=Europe/Berlin -e M365_MCP_WRITE=1 -- /path/to/.venv/bin/python /path/to/scripts/mcp_server.py
 ```
 
 **Safe by default.** Without flags the server is read-only. `M365_MCP_WRITE=1`
@@ -112,6 +112,17 @@ because a retry would create a second one (only events are deduplicated by
 Graph). The write tools take `dry_run` like the CLI. Tool arguments always
 reach the CLI as values (`--flag=value`, IDs after `--`), so a task titled
 `-h` or `--dry-run` stays a title.
+
+**Model input is untrusted.** The CLI puts IDs straight into Graph URL paths;
+here they come from a model that also reads calendar and task text written by
+others. The server therefore accepts only clean Graph IDs (letters, digits,
+`= _ + -`) for events, tasks and steps, and for a calendar or list given as an
+ID, so a crafted "ID" with `/`, `..`, `?`, `#` or `%` cannot steer a request to
+another endpoint. Its instructions tell the model to treat event and task text
+as data, not instructions.
+
+**Time zone.** Times are interpreted in `OUTLOOK_TZ` (default `UTC`, see Notes);
+set it where you register the server, as in the examples above.
 
 | Mode | Tools |
 |---|---|
