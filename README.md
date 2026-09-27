@@ -6,6 +6,8 @@ Originally proposed upstream as [NousResearch/hermes-agent#25979](https://github
 
 ## What it does
 
+Usable three ways: as an agent skill, as a plain CLI, and as an **MCP server** (see below).
+
 - **Calendar:** read (single / all / shared calendars), create, update, delete, keyword-search, full event detail — with recurrence (daily/weekly/monthly/yearly), all-day events, and series-master safety warnings.
 - **Microsoft To Do:** lists, tasks, subtasks ("steps"), create/update/complete/delete, recurrence, list CRUD.
 - **Idempotent writes** via content-based `transactionId` (Graph dedupes retries within 6h).
@@ -77,6 +79,47 @@ python3 scripts/outlook.py tasks
 python3 scripts/outlook.py create-task --title "Bananas" --list "Shopping"
 ```
 
+## MCP server
+
+The same calendar and To Do commands are also available as a **Model Context
+Protocol server** (`scripts/mcp_server.py`, stdio), so any MCP client (Claude
+Code, Claude Desktop, other agents) can use them as tools. It is a thin adapter
+over the CLI: every tool runs the existing subcommand, so validation, the audit
+log, idempotent writes and the token refresh are exactly the CLI's.
+
+Requires Python 3.10+ and the official MCP SDK:
+
+```bash
+python3 -m venv .venv && .venv/bin/pip install -r requirements-mcp.txt
+```
+
+Auth and config are shared with the CLI (steps 1–3 above). Then register it, e.g.
+in Claude Code:
+
+```bash
+# read-only (default)
+claude mcp add m365 -- /path/to/.venv/bin/python /path/to/scripts/mcp_server.py
+# allow creating/updating/completing
+claude mcp add m365 -e M365_MCP_WRITE=1 -- /path/to/.venv/bin/python /path/to/scripts/mcp_server.py
+```
+
+**Safe by default.** Without flags the server is read-only. `M365_MCP_WRITE=1`
+adds the write tools; deleting additionally needs `M365_MCP_DELETE=1`. Tools
+that are not enabled are not registered at all, so a model never sees them.
+Every tool carries MCP annotations (`readOnlyHint`, `destructiveHint`,
+`idempotentHint`), and the write tools take `dry_run` like the CLI.
+
+| Mode | Tools |
+|---|---|
+| read (always) | `status`, `list_calendars`, `list_events`, `search_events`, `get_event`, `list_task_lists`, `list_tasks`, `list_steps`, `audit_log` |
+| `M365_MCP_WRITE=1` | `create_event`, `update_event`, `create_task`, `update_task`, `complete_task`, `add_step`, `complete_step` |
+| + `M365_MCP_DELETE=1` | `delete_event`, `delete_task` |
+
+Failures come back as readable tool errors (the model sees e.g. *"end must be
+strictly after start"* or *"calendar 'X' not found. Known: [...]"*), never as a
+crashed server. The commands print JSON to stdout, which over stdio is the MCP
+channel, so the adapter captures it and serialises calls with a lock.
+
 ## Notes
 
 - **Timezone:** defaults to `UTC`. Override with the `OUTLOOK_TZ` env var (e.g. `OUTLOOK_TZ="Europe/Berlin"`). `--start`/`--end` must be timezone-*naive* ISO (no `Z`, no offset) — the TZ is applied via a Graph `Prefer` header.
@@ -90,6 +133,13 @@ idempotency, and validation logic:
 
 ```bash
 python3 tests/test_offline.py
+```
+
+MCP server tests (a real MCP client in-process against the server, Microsoft
+Graph faked: no network, no credentials; plus one start over real stdio):
+
+```bash
+.venv/bin/python -m pytest tests/ -q
 ```
 
 ## License

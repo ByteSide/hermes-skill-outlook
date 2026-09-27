@@ -4,3 +4,5 @@ audit.log
 __pycache__/
 *.pyc
 *.tmp
+.venv/
+.pytest_cache/

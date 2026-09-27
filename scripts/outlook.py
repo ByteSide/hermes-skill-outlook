@@ -982,7 +982,9 @@ def cmd_status(args):
     }, indent=2, ensure_ascii=False))
 
 
-def main():
+def build_parser() -> argparse.ArgumentParser:
+    """The CLI's argument parser. Shared with scripts/mcp_server.py, which
+    drives the same subcommands (validation, audit log, idempotency) as tools."""
     p = argparse.ArgumentParser(description="Outlook/Microsoft 365 skill")
     sub = p.add_subparsers(dest="cmd", required=True)
 
@@ -1159,8 +1161,11 @@ def main():
     # ---- diagnostics ----
     sub.add_parser("status", help="show graph identity + token freshness"
                    ).set_defaults(func=cmd_status)
+    return p
 
-    args = p.parse_args()
+
+def main():
+    args = build_parser().parse_args()
     try:
         args.func(args)
     except requests.HTTPError:
