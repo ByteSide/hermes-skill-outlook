@@ -85,7 +85,7 @@ The same calendar and To Do commands are also available as a **Model Context
 Protocol server** (`scripts/mcp_server.py`, stdio), so any MCP client (Claude
 Code, Claude Desktop, other agents) can use them as tools. It is a thin adapter
 over the CLI: every tool runs the existing subcommand, so validation, the audit
-log, idempotent writes and the token refresh are exactly the CLI's.
+log, the token refresh and the deduplicated event creation are exactly the CLI's.
 
 Requires Python 3.10+ and the official MCP SDK:
 
@@ -107,7 +107,11 @@ claude mcp add m365 -e M365_MCP_WRITE=1 -- /path/to/.venv/bin/python /path/to/sc
 adds the write tools; deleting additionally needs `M365_MCP_DELETE=1`. Tools
 that are not enabled are not registered at all, so a model never sees them.
 Every tool carries MCP annotations (`readOnlyHint`, `destructiveHint`,
-`idempotentHint`), and the write tools take `dry_run` like the CLI.
+`idempotentHint`); `create_task` and `add_step` are marked *not* idempotent,
+because a retry would create a second one (only events are deduplicated by
+Graph). The write tools take `dry_run` like the CLI. Tool arguments always
+reach the CLI as values (`--flag=value`, IDs after `--`), so a task titled
+`-h` or `--dry-run` stays a title.
 
 | Mode | Tools |
 |---|---|

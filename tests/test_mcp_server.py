@@ -51,6 +51,10 @@ class FakeGraph:
             return {"id": "EVNEW", "subject": kw["json"]["subject"], "webLink": "https://outlook.example/e"}
         if path.startswith("/me/todo/lists?"):
             return {"value": [{"id": "AQMkDEFAULT", "displayName": "Aufgaben", "wellknownListName": "defaultList"}]}
+        if method == "POST" and path.endswith("/tasks"):
+            return {"id": "TNEW", "title": kw["json"]["title"], "status": "notStarted"}
+        if method == "PATCH" and "/tasks/" in path:
+            return {"id": path.rsplit("/", 1)[-1], "status": "completed"}
         if "/tasks?" in path:
             return {"value": [{"id": "T1", "title": "Bananen", "status": "notStarted", "importance": "normal"}]}
         raise AssertionError(f"unexpected Graph call {method} {path}")
@@ -174,6 +178,40 @@ def test_graph_error_comes_back_as_tool_error(graph):
 def test_unknown_calendar_name_is_explained(graph):
     res = run(_call(srv.create_server(), "list_events", {"calendar": "Gibtsnicht"}))
     assert res.is_error and "not found" in _text(res) and "Kalender" in _text(res)
+
+
+# ------------------------------------------------- arguments and annotations
+
+def test_argv_values_can_never_become_options():
+    argv = srv.build_argv("create-task", title="-h", body="--dry-run", importance=None, dry_run=False)
+    assert argv == ["create-task", "--title=-h", "--body=--dry-run"]
+    assert srv.build_argv("complete-task", "-abc", task_list="Einkauf") == ["complete-task", "--list=Einkauf", "--", "-abc"]
+    # "" is "not given" - except where it means something (update_task: clear the due date)
+    assert srv.build_argv("update-task", "T1", title="") == ["update-task", "--", "T1"]
+    assert srv.build_argv("update-task", "T1", keep_empty=("due",), due="") == ["update-task", "--due=", "--", "T1"]
+
+
+def test_leading_dash_values_reach_graph_as_values(graph):
+    server = srv.create_server(allow_write=True)
+    data = _data(run(_call(server, "create_task", {"title": "-h", "body": "--dry-run"})))
+    assert data["id"] == "TNEW"
+    body = next(b for m, _, b in graph.calls if m == "POST")
+    assert body["title"] == "-h" and body["body"]["content"] == "--dry-run"
+    run(_call(server, "complete_task", {"task_id": "-weird-id"}))
+    assert any(m == "PATCH" and p.endswith("/tasks/-weird-id") for m, p, _ in graph.calls)
+
+
+def test_only_deduplicated_creates_claim_idempotency():
+    tools = run(_tools(srv.create_server(allow_write=True)))
+    assert tools["create_event"].annotations.idempotent_hint is True     # transactionId
+    assert tools["create_task"].annotations.idempotent_hint is False     # a retry duplicates
+    assert tools["add_step"].annotations.idempotent_hint is False
+
+
+def test_unexpected_failure_is_named_not_a_crash(graph, monkeypatch):
+    monkeypatch.setattr(o, "gapi", lambda *a, **k: {"value": [{"no": "id"}]})
+    res = run(_call(srv.create_server(), "list_calendars"))
+    assert res.is_error and "unexpected: KeyError" in _text(res)
 
 
 # ----------------------------------------------------------- real transport
